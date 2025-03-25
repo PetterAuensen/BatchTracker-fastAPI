@@ -63,6 +63,8 @@ async def create_or_update_batch(batch: Batch):
             supplier = EXCLUDED.supplier,
             dynamic_fields = EXCLUDED.dynamic_fields;
     """
-    values = batch.dict()
+    	import json
+	values = batch.dict()
+	values["dynamic_fields"] = json.dumps(values["dynamic_fields"])
     await database.execute(query=query, values=values)
     return {"status": "created", "batch_id": batch.batch_id}
