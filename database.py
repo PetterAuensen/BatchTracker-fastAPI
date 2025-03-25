@@ -1,14 +1,16 @@
 import os
 from databases import Database
 
+# Henter databasen fra miljøvariabel
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is not set")
 
+# Oppretter databaseobjekt
 database = Database(DATABASE_URL)
 
-
+# Kjør ved oppstart for å opprette nødvendige tabeller
 async def init_db():
     await database.connect()
 
@@ -33,10 +35,11 @@ async def init_db():
     await database.execute("""
         CREATE TABLE IF NOT EXISTS batch_rfid_map (
             customer_id TEXT NOT NULL,
-            rfid TEXT PRIMARY KEY,
+            rfid TEXT NOT NULL,
             store_id TEXT NOT NULL,
             batch_id TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (customer_id, store_id, rfid)
         );
     """)
 
