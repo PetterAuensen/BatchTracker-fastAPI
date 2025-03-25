@@ -1,9 +1,15 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, Dict
+from datetime import date
+import json
+
 from database import database, init_db
 
 app = FastAPI(title="BatchTracker API")
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -11,23 +17,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Koble til database ved oppstart
 @app.on_event("startup")
 async def startup():
     await database.connect()
     await init_db()
 
+# Koble fra database ved nedstengning
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
 
+# Helse-endepunkt
 @app.get("/")
 def read_root():
     return {"status": "BatchTracker is running"}
 
-from pydantic import BaseModel
-from typing import Optional, Dict
-from datetime import date
-
+# Datamodell for batch
 class Batch(BaseModel):
     customer_id: str
     store_id: str
@@ -40,6 +46,7 @@ class Batch(BaseModel):
     supplier: Optional[str] = None
     dynamic_fields: Optional[Dict[str, str]] = {}
 
+# Endepunkt for å opprette eller oppdatere batch
 @app.post("/batch")
 async def create_or_update_batch(batch: Batch):
     query = """
@@ -63,8 +70,11 @@ async def create_or_update_batch(batch: Batch):
             supplier = EXCLUDED.supplier,
             dynamic_fields = EXCLUDED.dynamic_fields;
     """
-    	import json
-	values = batch.dict()
-	values["dynamic_fields"] = json.dumps(values["dynamic_fields"])
-    await database.execute(query=query, values=values)
-    return {"status": "created", "batch_id": batch.batch_id}
+    values = batch.dict()
+    values["dynamic_fields"] = json.dumps(values["dynamic_fields"])
+    try:
+        await database.execute(query=query, values=values)
+        return {"status": "created", "batch_id": batch.batch_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
