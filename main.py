@@ -6,8 +6,12 @@ from datetime import date
 import json
 
 from database import database, init_db
+from routes.batch_rfid import router as batch_rfid_router
 
 app = FastAPI(title="BatchTracker API")
+
+# Inkluder routere
+app.include_router(batch_rfid_router, prefix="/rfid", tags=["Batch RFID"])
 
 # CORS middleware
 app.add_middleware(
@@ -77,4 +81,3 @@ async def create_or_update_batch(batch: Batch):
         return {"status": "created", "batch_id": batch.batch_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

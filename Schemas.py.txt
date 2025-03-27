@@ -1,0 +1,6 @@
+from pydantic import BaseModel
+
+class BatchRFIDLink(BaseModel):
+    customer_id: str
+    rfid: str
+    store_id: str
