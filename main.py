@@ -13,10 +13,7 @@ app = FastAPI(title="BatchTracker API")
 # ✅ Tillat frontend fra Railway og localhost
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://batchtracker-fastapi-production.up.railway.app",
-    ],
+    allow_origins=["*"],  # For utvikling, åpne for alle. Kan spesifiseres senere.
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
