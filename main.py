@@ -16,7 +16,10 @@ app.include_router(batch_rfid_router, prefix="/rfid", tags=["Batch RFID"])
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+    "http://localhost:3000",
+    "https://batchtracker-fastapi-production.up.railway.app",
+],
     allow_methods=["*"],
     allow_headers=["*"],
 )
