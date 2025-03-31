@@ -10,35 +10,35 @@ from routes.batch_rfid import router as batch_rfid_router
 
 app = FastAPI(title="BatchTracker API")
 
-# ✅ Tillat frontend fra Railway og localhost
+# Aktiver CORS slik at frontend får tilgang til API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For utvikling, åpne for alle. Kan spesifiseres senere.
+    allow_origins=["*"],  # Åpner for alle domener i utviklingsmodus
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Ruter
+# Inkluder RFID-ruter
 app.include_router(batch_rfid_router, prefix="/rfid", tags=["Batch RFID"])
 
-# ✅ Database ved oppstart
+# Koble til database ved oppstart
 @app.on_event("startup")
 async def startup():
     await database.connect()
     await init_db()
 
-# ✅ Database ved nedstengning
+# Koble fra database ved nedstengning
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
 
-# ✅ Helse-sjekk
+# Helse-endepunkt
 @app.get("/")
 def read_root():
     return {"status": "BatchTracker is running"}
 
-# ✅ Modell for batch-opprettelse
+# Datamodell for batch
 class Batch(BaseModel):
     customer_id: str
     store_id: str
@@ -51,7 +51,7 @@ class Batch(BaseModel):
     supplier: Optional[str] = None
     dynamic_fields: Optional[Dict[str, str]] = {}
 
-# ✅ Endepunkt for å registrere eller oppdatere en batch
+# Endepunkt for å opprette eller oppdatere batch
 @app.post("/batch")
 async def create_or_update_batch(batch: Batch):
     query = """
