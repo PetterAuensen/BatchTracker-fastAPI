@@ -38,7 +38,7 @@ async def move_rfid(movement: RFIDMovement):
     fetch_batch_query = """
         SELECT batch_id FROM batch_rfid_map
         WHERE customer_id = :customer_id AND store_id = :store_id AND rfid = :rfid
-        ORDER BY timestamp DESC LIMIT 1
+        ORDER BY created_at DESC LIMIT 1
     """
     fetch_values = {
         "customer_id": movement.customer_id,
