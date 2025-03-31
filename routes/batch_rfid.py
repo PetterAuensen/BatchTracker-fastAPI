@@ -19,7 +19,7 @@ async def link_rfid(link: RFIDLink):
         VALUES (:customer_id, :store_id, :batch_id, :rfid, :timestamp)
     """
     values = link.dict()
-    values["timestamp"] = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+    values["timestamp"] = datetime.utcnow()
     try:
         await database.execute(query=query, values=values)
         return {"status": "linked", "rfid": link.rfid, "batch_id": link.batch_id}
@@ -85,7 +85,7 @@ async def move_rfid(movement: RFIDMovement):
         "batch_id": batch_id,
         "rfid": movement.rfid,
         "zone": movement.zone,
-        "timestamp": datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+        "timestamp": datetime.utcnow()
     }
 
     try:
