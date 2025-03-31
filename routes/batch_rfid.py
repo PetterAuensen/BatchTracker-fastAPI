@@ -15,16 +15,17 @@ class RFIDLink(BaseModel):
 @router.post("/link")
 async def link_rfid(link: RFIDLink):
     query = """
-        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid, timestamp)
-        VALUES (:customer_id, :store_id, :batch_id, :rfid, :timestamp)
+        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid)
+        VALUES (:customer_id, :store_id, :batch_id, :rfid)
     """
     values = link.dict()
-    values["timestamp"] = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+    # Fjernet timestamp midlertidig hvis kolonnen ikke finnes
     try:
         await database.execute(query=query, values=values)
         return {"status": "linked", "rfid": link.rfid, "batch_id": link.batch_id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"RFID link feilet: {str(e)}")
+
 
 # Modell for RFID-flytting
 class RFIDMovement(BaseModel):
@@ -39,7 +40,7 @@ async def move_rfid(movement: RFIDMovement):
     fetch_batch_query = """
         SELECT batch_id FROM batch_rfid_map
         WHERE customer_id = :customer_id AND store_id = :store_id AND rfid = :rfid
-        ORDER BY timestamp DESC LIMIT 1
+        ORDER BY id DESC LIMIT 1
     """
     fetch_values = {
         "customer_id": movement.customer_id,
@@ -57,7 +58,7 @@ async def move_rfid(movement: RFIDMovement):
     fetch_last_zone_query = """
         SELECT zone FROM rfid_movements
         WHERE customer_id = :customer_id AND store_id = :store_id AND rfid = :rfid
-        ORDER BY timestamp DESC LIMIT 1
+        ORDER BY id DESC LIMIT 1
     """
     last_zone = await database.fetch_one(query=fetch_last_zone_query, values=fetch_values)
 
@@ -68,8 +69,8 @@ async def move_rfid(movement: RFIDMovement):
         }
 
     insert_query = """
-        INSERT INTO rfid_movements (customer_id, store_id, batch_id, rfid, zone, timestamp)
-        VALUES (:customer_id, :store_id, :batch_id, :rfid, :zone, :timestamp)
+        INSERT INTO rfid_movements (customer_id, store_id, batch_id, rfid, zone)
+        VALUES (:customer_id, :store_id, :batch_id, :rfid, :zone)
     """
     insert_values = {
         "customer_id": movement.customer_id,
@@ -77,7 +78,6 @@ async def move_rfid(movement: RFIDMovement):
         "batch_id": batch_id,
         "rfid": movement.rfid,
         "zone": movement.zone,
-        "timestamp": datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
     }
 
     try:
@@ -87,7 +87,6 @@ async def move_rfid(movement: RFIDMovement):
             "rfid": movement.rfid,
             "batch_id": batch_id,
             "zone": movement.zone,
-            "timestamp": insert_values["timestamp"]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Flytting feilet: {str(e)}")
