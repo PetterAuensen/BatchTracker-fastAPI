@@ -16,11 +16,11 @@ class RFIDLink(BaseModel):
 @router.post("/link")
 async def link_rfid(link: RFIDLink):
     query = """
-        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid, timestamp)
-        VALUES (:customer_id, :store_id, :batch_id, :rfid, :timestamp)
+        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid, created_at)
+        VALUES (:customer_id, :store_id, :batch_id, :rfid, :created_at)
     """
     values = link.dict()
-    values["timestamp"] = datetime.utcnow()
+    values["created_at"] = datetime.utcnow()
     try:
         await database.execute(query=query, values=values)
         return {"status": "linked", "rfid": link.rfid, "batch_id": link.batch_id}
