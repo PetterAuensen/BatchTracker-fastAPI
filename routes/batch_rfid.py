@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
+from typing import List
 from database import database
 
 router = APIRouter()
@@ -100,3 +101,26 @@ async def move_rfid(movement: RFIDMovement):
     except Exception as e:
         print("Feil ved innsending av bevegelse:", e)
         raise HTTPException(status_code=500, detail="Databasefeil ved innsending av flytting")
+
+# Modell for input til henting av batcher
+class BatchQuery(BaseModel):
+    customer_id: str
+    store_id: str
+
+@router.post("/batches")
+async def get_batches(query: BatchQuery):
+    select_query = """
+        SELECT * FROM batches
+        WHERE customer_id = :customer_id AND store_id = :store_id
+    """
+    values = {
+        "customer_id": query.customer_id,
+        "store_id": query.store_id
+    }
+
+    try:
+        result = await database.fetch_all(query=select_query, values=values)
+        return result
+    except Exception as e:
+        print("Feil ved henting av batcher:", e)
+        raise HTTPException(status_code=500, detail="Databasefeil ved henting av batcher")
