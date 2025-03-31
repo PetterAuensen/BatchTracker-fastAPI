@@ -59,7 +59,7 @@ async def move_rfid(movement: RFIDMovement):
     batch_id = result["batch_id"]
 
     fetch_last_zone_query = """
-        SELECT zone FROM rfid_movements
+        SELECT zone FROM batch_movements
         WHERE customer_id = :customer_id AND store_id = :store_id AND rfid = :rfid
         ORDER BY timestamp DESC LIMIT 1
     """
@@ -76,7 +76,7 @@ async def move_rfid(movement: RFIDMovement):
         }
 
     insert_query = """
-        INSERT INTO rfid_movements (customer_id, store_id, batch_id, rfid, zone, timestamp)
+        INSERT INTO batch_movements (customer_id, store_id, batch_id, rfid, zone, timestamp)
         VALUES (:customer_id, :store_id, :batch_id, :rfid, :zone, :timestamp)
     """
     insert_values = {
