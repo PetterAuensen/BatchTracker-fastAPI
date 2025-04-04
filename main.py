@@ -6,21 +6,21 @@ from datetime import date
 import json
 
 from database import database, init_db
-from routes.batch_rfid import router as batch_rfid_router
+from routes import batch_rfid  # ✅ Sørger for at hele modulen er tilgjengelig
 
 app = FastAPI(title="BatchTracker API")
 
 # Aktiver CORS slik at frontend får tilgang til API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Åpner for alle domener i utviklingsmodus
+    allow_origins=["*"],  # I prod bør du sette eksakt domene her
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Inkluder RFID-ruter
-app.include_router(batch_rfid_router, prefix="/rfid", tags=["Batch RFID"])
+# ✅ Inkluder alle ruter fra batch_rfid.py, med felles prefix /rfid
+app.include_router(batch_rfid.router, prefix="/rfid", tags=["Batch RFID"])
 
 # Koble til database ved oppstart
 @app.on_event("startup")

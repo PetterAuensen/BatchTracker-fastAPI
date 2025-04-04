@@ -128,7 +128,7 @@ async def get_batches(query: BatchQuery):
 
 # Hent batch_movements med filtrering
 @router.post("/rfid/movements")
-async def get_batch_movements(filter: MovementFilter):
+async def get_batch_movements(request: Request):
     try:
         query = """
             SELECT bm.store_id, b.article_id, bm.batch_id, bm.rfid, bm.zone, bm.timestamp
