@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime
-from typing import List
 from database import database
 
 router = APIRouter()
@@ -48,10 +48,8 @@ async def move_rfid(movement: RFIDMovement):
     }
 
     try:
-        print("Henter batch med verdier:", fetch_values)
         result = await database.fetch_one(query=fetch_batch_query, values=fetch_values)
     except Exception as e:
-        print("Feil ved henting av batch:", e)
         raise HTTPException(status_code=500, detail="Databasefeil ved henting av batch")
 
     if not result:
@@ -67,7 +65,6 @@ async def move_rfid(movement: RFIDMovement):
     try:
         last_zone = await database.fetch_one(query=fetch_last_zone_query, values=fetch_values)
     except Exception as e:
-        print("Feil ved henting av siste sone:", e)
         raise HTTPException(status_code=500, detail="Databasefeil ved henting av sone")
 
     if last_zone and last_zone["zone"] == movement.zone:
@@ -99,10 +96,9 @@ async def move_rfid(movement: RFIDMovement):
             "timestamp": insert_values["timestamp"]
         }
     except Exception as e:
-        print("Feil ved innsending av bevegelse:", e)
         raise HTTPException(status_code=500, detail="Databasefeil ved innsending av flytting")
 
-# Modell for input til henting av batcher
+# Modell for å hente alle batcher
 class BatchQuery(BaseModel):
     customer_id: str
     store_id: str
@@ -113,14 +109,56 @@ async def get_batches(query: BatchQuery):
         SELECT * FROM batches
         WHERE customer_id = :customer_id AND store_id = :store_id
     """
-    values = {
-        "customer_id": query.customer_id,
-        "store_id": query.store_id
-    }
-
+    values = query.dict()
     try:
         result = await database.fetch_all(query=select_query, values=values)
         return result
     except Exception as e:
-        print("Feil ved henting av batcher:", e)
         raise HTTPException(status_code=500, detail="Databasefeil ved henting av batcher")
+
+# Modell for filtrering av batch movements
+class MovementFilter(BaseModel):
+    customer_id: str
+    store_id: str
+    article_id: Optional[str] = None
+
+@router.post("/movements")
+async def get_batch_movements(filter: MovementFilter):
+    values = {
+        "customer_id": filter.customer_id,
+        "store_id": filter.store_id,
+    }
+
+    article_filter = "AND b.article_id = :article_id" if filter.article_id else ""
+    if filter.article_id:
+        values["article_id"] = filter.article_id
+
+    query = f"""
+        SELECT
+            bm.store_id,
+            b.article_id,
+            bm.batch_id,
+            bm.rfid,
+            bm.zone,
+            bm.timestamp
+        FROM batch_movements bm
+        JOIN batches b
+          ON bm.customer_id = b.customer_id
+         AND bm.store_id = b.store_id
+         AND bm.batch_id = b.batch_id
+        WHERE
+            bm.customer_id = :customer_id
+            AND bm.store_id = :store_id
+            AND b.status IN (1, 8)
+            {article_filter}
+        ORDER BY
+            b.article_id,
+            bm.batch_id,
+            bm.timestamp DESC
+    """
+
+    try:
+        rows = await database.fetch_all(query=query, values=values)
+        return rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Databasefeil: {str(e)}")
