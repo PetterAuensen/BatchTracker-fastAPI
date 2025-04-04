@@ -1,40 +1,58 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 from database import database
 
 router = APIRouter()
 
-# Modell for kobling av RFID til batch
+# ----------------------
+# MODELLER
+# ----------------------
+
 class RFIDLink(BaseModel):
     customer_id: str
     store_id: str
     batch_id: str
     rfid: str
 
-@router.post("/link")
-async def link_rfid(link: RFIDLink):
-    query = """
-        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid, created_at)
-        VALUES (:customer_id, :store_id, :batch_id, :rfid, :created_at)
-    """
-    values = link.dict()
-    values["created_at"] = datetime.utcnow()
-    try:
-        await database.execute(query=query, values=values)
-        return {"status": "linked", "rfid": link.rfid, "batch_id": link.batch_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Modell for RFID-flytting
 class RFIDMovement(BaseModel):
     customer_id: str
     store_id: str
     rfid: str
     zone: str
 
-@router.post("/move")
+class BatchQuery(BaseModel):
+    customer_id: str
+    store_id: str
+
+class MovementFilter(BaseModel):
+    customer_id: str
+    store_id: str
+    article_id: Optional[str] = None
+
+# ----------------------
+# ENDPOINTS
+# ----------------------
+
+# Koble RFID til batch
+@router.post("/rfid/link")
+async def link_rfid(link: RFIDLink):
+    query = """
+        INSERT INTO batch_rfid_map (customer_id, store_id, batch_id, rfid, created_at)
+        VALUES (:customer_id, :store_id, :batch_id, :rfid, :created_at)
+    """
+    values = link.dict()
+    values["created_at"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+    try:
+        await database.execute(query=query, values=values)
+        return {"status": "linked", "rfid": link.rfid, "batch_id": link.batch_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Databasefeil ved linking: {str(e)}")
+
+
+# Flytt RFID til ny sone
+@router.post("/rfid/move")
 async def move_rfid(movement: RFIDMovement):
     fetch_batch_query = """
         SELECT batch_id FROM batch_rfid_map
@@ -50,22 +68,20 @@ async def move_rfid(movement: RFIDMovement):
     try:
         result = await database.fetch_one(query=fetch_batch_query, values=fetch_values)
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Databasefeil ved henting av batch")
+        raise HTTPException(status_code=500, detail=f"Databasefeil ved henting av batch: {str(e)}")
 
     if not result:
-        raise HTTPException(status_code=404, detail="RFID ikke funnet eller ikke koblet til en batch")
+        raise HTTPException(status_code=404, detail="RFID ikke koblet til batch")
 
     batch_id = result["batch_id"]
 
-    fetch_last_zone_query = """
+    # Sjekk om samme sone allerede er registrert
+    last_zone_query = """
         SELECT zone FROM batch_movements
         WHERE customer_id = :customer_id AND store_id = :store_id AND rfid = :rfid
         ORDER BY timestamp DESC LIMIT 1
     """
-    try:
-        last_zone = await database.fetch_one(query=fetch_last_zone_query, values=fetch_values)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Databasefeil ved henting av sone")
+    last_zone = await database.fetch_one(query=last_zone_query, values=fetch_values)
 
     if last_zone and last_zone["zone"] == movement.zone:
         return {
@@ -78,12 +94,10 @@ async def move_rfid(movement: RFIDMovement):
         VALUES (:customer_id, :store_id, :batch_id, :rfid, :zone, :timestamp)
     """
     insert_values = {
-        "customer_id": movement.customer_id,
-        "store_id": movement.store_id,
+        **fetch_values,
         "batch_id": batch_id,
-        "rfid": movement.rfid,
         "zone": movement.zone,
-        "timestamp": datetime.utcnow()
+        "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
     }
 
     try:
@@ -96,69 +110,49 @@ async def move_rfid(movement: RFIDMovement):
             "timestamp": insert_values["timestamp"]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Databasefeil ved innsending av flytting")
+        raise HTTPException(status_code=500, detail=f"Databasefeil ved flytting: {str(e)}")
 
-# Modell for å hente alle batcher
-class BatchQuery(BaseModel):
-    customer_id: str
-    store_id: str
 
+# Hent alle batcher for kunde og butikk
 @router.post("/batches")
 async def get_batches(query: BatchQuery):
-    select_query = """
-        SELECT * FROM batches
-        WHERE customer_id = :customer_id AND store_id = :store_id
-    """
-    values = query.dict()
     try:
-        result = await database.fetch_all(query=select_query, values=values)
-        return result
+        db_query = """
+            SELECT * FROM batches
+            WHERE customer_id = :customer_id AND store_id = :store_id
+        """
+        return await database.fetch_all(query=db_query, values=query.dict())
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Databasefeil ved henting av batcher")
+        raise HTTPException(status_code=500, detail=f"Databasefeil ved henting av batcher: {str(e)}")
 
-# Modell for filtrering av batch movements
-class MovementFilter(BaseModel):
-    customer_id: str
-    store_id: str
-    article_id: Optional[str] = None
 
-@router.post("/movements")
+# Hent batch_movements med filtrering
+@router.post("/rfid/movements")
 async def get_batch_movements(filter: MovementFilter):
-    values = {
-        "customer_id": filter.customer_id,
-        "store_id": filter.store_id,
-    }
-
-    article_filter = "AND b.article_id = :article_id" if filter.article_id else ""
-    if filter.article_id:
-        values["article_id"] = filter.article_id
-
-    query = f"""
-        SELECT
-            bm.store_id,
-            b.article_id,
-            bm.batch_id,
-            bm.rfid,
-            bm.zone,
-            bm.timestamp
-        FROM batch_movements bm
-        JOIN batches b
-          ON bm.customer_id = b.customer_id
-         AND bm.store_id = b.store_id
-         AND bm.batch_id = b.batch_id
-        WHERE
-            bm.customer_id = :customer_id
-            AND bm.store_id = :store_id
-            AND b.status IN (1, 8)
-            {article_filter}
-        ORDER BY
-            b.article_id,
-            bm.batch_id,
-            bm.timestamp DESC
-    """
-
     try:
-        rows = await database.fetch_all(query=query, values=values)
-        return rows
+        query = """
+            SELECT bm.store_id, b.article_id, bm.batch_id, bm.rfid, bm.zone, bm.timestamp
+            FROM batch_movements bm
+            JOIN batches b ON bm.customer_id = b.customer_id
+                           AND bm.store_id = b.store_id
+                           AND bm.batch_id = b.batch_id
+            WHERE bm.customer_id = :customer_id
+              AND bm.store_id = :store_id
+              AND b.status IN (1, 8)
+        """
+
+        values = {
+            "customer_id": filter.customer_id,
+            "store_id": filter.store_id,
+        }
+
+        if filter.article_id:
+            query += " AND b.article_id = :article_id"
+            values["article_id"] = filter.article_id
+
+        query += " ORDER BY b.article_id, bm.batch_id, bm.timestamp DESC"
+
+        return await database.fetch_all(query=query, values=values)
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Databasefeil: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Databasefeil ved henting av bevegelser: {str(e)}")
